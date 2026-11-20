@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b1d2e"/>
+      <stop offset="1" stop-color="#0d0e17"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ee7ff"/>
+      <stop offset="1" stop-color="#8b5cff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#5ee7ff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#5ee7ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="92" fill="url(#glow)"/>
+  <g fill="none" stroke="url(#ring)" stroke-linecap="round">
+    <circle cx="128" cy="128" r="78" stroke-width="10"/>
+    <ellipse cx="128" cy="128" rx="34" ry="78" stroke-width="6" opacity="0.75"/>
+    <ellipse cx="128" cy="128" rx="78" ry="28" stroke-width="6" opacity="0.45"/>
+  </g>
+  <line x1="36" y1="128" x2="220" y2="128" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="9" fill="#ffffff"/>
+</svg>

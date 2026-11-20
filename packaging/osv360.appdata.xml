@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>osv360</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>osv360</name>
+  <summary>Convert DJI Osmo 360 .OSV files into stabilized equirectangular video</summary>
+  <description>
+    <p>osv360 stitches the two fisheye lenses of the DJI Osmo 360 using the camera's own calibration,
+    locks the horizon with the built-in 1 kHz IMU and writes standard 8K HEVC 10-bit 360° video that
+    Kdenlive, FilmCraft and other editors can open. Stitching runs on the GPU (Vulkan), decoding and
+    encoding use VA-API.</p>
+  </description>
+  <launchable type="desktop-id">osv360.desktop</launchable>
+  <categories><category>AudioVideo</category><category>Video</category></categories>
+</component>

@@ -1,0 +1,20 @@
+# environments / caches
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# build output
+build/
+dist/
+
+# media (never commit footage or renders)
+footage/
+output/
+*.OSV
+*.osv
+*.LRF
+*.mp4
+*.mov

@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry: run the bundled osv360 (GUI without arguments, CLI with a subcommand).
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/lib/osv360/osv360" "$@"

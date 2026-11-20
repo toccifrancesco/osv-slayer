@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=osv360
+GenericName=360° Video Converter
+Comment=Convert DJI Osmo 360 .OSV recordings into stabilized equirectangular video
+Exec=osv360 %F
+Icon=osv360
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=360;VR;DJI;Osmo;equirectangular;stabilization;
+StartupWMClass=osv360
