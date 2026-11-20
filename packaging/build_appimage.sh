@@ -54,15 +54,20 @@ fi
 cp "$APPDIR/usr/share/icons/hicolor/256x256/apps/osv360.png" "$APPDIR/osv360.png"
 ln -sf osv360.png "$APPDIR/.DirIcon"
 
-echo "==> appimagetool $APPIMAGETOOL_VERSION / runtime $RUNTIME_VERSION"
+echo "==> appimagetool / runtime $RUNTIME_VERSION"
 mkdir -p "$TOOLS"
-TOOL="$TOOLS/appimagetool-$APPIMAGETOOL_VERSION-$ARCH.AppImage"
+# use an installed appimagetool if there is one (or APPIMAGETOOL=/path/to/it), else a pinned download
+TOOL="${APPIMAGETOOL:-$(command -v appimagetool || true)}"
+if [ -z "$TOOL" ]; then
+    TOOL="$TOOLS/appimagetool-$APPIMAGETOOL_VERSION-$ARCH.AppImage"
+    [ -f "$TOOL" ] || curl -fL -o "$TOOL" \
+        "https://github.com/AppImage/appimagetool/releases/download/$APPIMAGETOOL_VERSION/appimagetool-$ARCH.AppImage"
+    chmod +x "$TOOL"
+fi
+echo "    using $TOOL"
 RUNTIME="$TOOLS/runtime-$RUNTIME_VERSION-$ARCH"
-[ -f "$TOOL" ] || curl -fL -o "$TOOL" \
-    "https://github.com/AppImage/appimagetool/releases/download/$APPIMAGETOOL_VERSION/appimagetool-$ARCH.AppImage"
 [ -f "$RUNTIME" ] || curl -fL -o "$RUNTIME" \
     "https://github.com/AppImage/type2-runtime/releases/download/$RUNTIME_VERSION/runtime-$ARCH"
-chmod +x "$TOOL"
 
 mkdir -p "$(dirname "$OUT")"
 # extract-and-run: works without FUSE on the build machine
