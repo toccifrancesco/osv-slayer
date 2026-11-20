@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.4.0   # this action only publishes full version tags
       - name: System packages (ffmpeg for container tests, Qt runtime libs)
         run: |
           sudo apt-get update
