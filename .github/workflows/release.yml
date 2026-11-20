@@ -17,11 +17,11 @@ jobs:
     # oldest supported runner = oldest glibc = AppImage runs on more distributions
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
       - name: System packages
         run: |
           sudo apt-get update
@@ -29,7 +29,7 @@ jobs:
             libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3
       - name: Build AppImage
         run: packaging/build_appimage.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: dist/*.AppImage
@@ -38,38 +38,38 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
       - name: Install
         run: uv sync --extra build --extra dev
       - name: Tests
         run: uv run --no-sync python -m pytest -q
       - name: Build zip
         run: uv run --no-sync python packaging/build.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: dist/*.zip
           if-no-files-found: error
 
   macos:
-    runs-on: macos-14   # Apple Silicon (arm64)
+    runs-on: macos-15   # Apple Silicon (arm64)
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
       - name: Install
         run: uv sync --extra build --extra dev
       - name: Tests
         run: uv run --no-sync python -m pytest -q
       - name: Build dmg
         run: uv run --no-sync python packaging/build.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/*.dmg
@@ -82,8 +82,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

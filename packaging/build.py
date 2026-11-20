@@ -68,9 +68,10 @@ def package_windows() -> Path:
     shutil.copy(ROOT / "packaging/README-windows.txt", folder / "README.txt")
     shutil.copy(ROOT / "LICENSE", folder / "LICENSE.txt")
     DIST.mkdir(exist_ok=True)
-    out = DIST / f"osv360-{VERSION}-windows-x64"
-    shutil.make_archive(str(out), "zip", root_dir=dist, base_dir="osv360")
-    return out.with_suffix(".zip")
+    # note: not Path.with_suffix(): the version's dots would be taken for an extension
+    archive = shutil.make_archive(str(DIST / f"osv360-{VERSION}-windows-x64"), "zip",
+                                  root_dir=dist, base_dir="osv360")
+    return Path(archive)
 
 
 def package_macos() -> Path:

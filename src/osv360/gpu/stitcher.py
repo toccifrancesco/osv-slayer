@@ -36,14 +36,13 @@ class GPUStitcher:
         adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
         self.adapter_info = adapter.info
         self.dev = adapter.request_device_sync(
-            required_features=["texture-format16bit-norm"],
             required_limits={"max-storage-buffer-binding-size": adapter.limits["max-storage-buffer-binding-size"],
                              "max-buffer-size": adapter.limits["max-buffer-size"]})
         d = self.dev
         TU = wgpu.TextureUsage
-        self.ytex = [d.create_texture(size=(in_size, in_size, 1), format="r16unorm",
+        self.ytex = [d.create_texture(size=(in_size, in_size, 1), format="r16uint",
                                       usage=TU.TEXTURE_BINDING | TU.COPY_DST) for _ in range(2)]
-        self.ctex = [d.create_texture(size=(in_size // 2, in_size // 2, 1), format="rg16unorm",
+        self.ctex = [d.create_texture(size=(in_size // 2, in_size // 2, 1), format="rg16uint",
                                       usage=TU.TEXTURE_BINDING | TU.COPY_DST) for _ in range(2)]
         BU = wgpu.BufferUsage
         self.ybytes = out_w * out_h * 2
@@ -52,13 +51,10 @@ class GPUStitcher:
         self.oc = d.create_buffer(size=self.cbytes, usage=BU.STORAGE | BU.COPY_SRC)
         self.read = d.create_buffer(size=self.ybytes + self.cbytes, usage=BU.MAP_READ | BU.COPY_DST)
         self.ubuf = d.create_buffer(size=PARAM_FLOATS * 4, usage=BU.UNIFORM | BU.COPY_DST)
-        samp = d.create_sampler(mag_filter="linear", min_filter="linear",
-                                address_mode_u="clamp-to-edge", address_mode_v="clamp-to-edge")
         module = d.create_shader_module(code=SHADER)
         self.pipe = d.create_compute_pipeline(layout="auto", compute={"module": module, "entry_point": "main"})
         entries = [
             {"binding": 0, "resource": {"buffer": self.ubuf}},
-            {"binding": 1, "resource": samp},
             {"binding": 2, "resource": self.ytex[0].create_view()},
             {"binding": 3, "resource": self.ctex[0].create_view()},
             {"binding": 4, "resource": self.ytex[1].create_view()},

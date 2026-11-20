@@ -21,11 +21,12 @@ struct Params {
 };
 
 @group(0) @binding(0) var<uniform> P: Params;
-@group(0) @binding(1) var samp: sampler;
-@group(0) @binding(2) var y0: texture_2d<f32>;
-@group(0) @binding(3) var c0: texture_2d<f32>;
-@group(0) @binding(4) var y1: texture_2d<f32>;
-@group(0) @binding(5) var c1: texture_2d<f32>;
+// Input planes are uint16 integer textures (r16uint / rg16uint): core WebGPU formats that every
+// device supports (unlike 16-bit *normalized* textures). Bilinear filtering is done by hand.
+@group(0) @binding(2) var y0: texture_2d<u32>;
+@group(0) @binding(3) var c0: texture_2d<u32>;
+@group(0) @binding(4) var y1: texture_2d<u32>;
+@group(0) @binding(5) var c1: texture_2d<u32>;
 @group(0) @binding(6) var<storage, read_write> out_y: array<u32>;
 @group(0) @binding(7) var<storage, read_write> out_c: array<u32>;
 
@@ -80,23 +81,52 @@ fn weight0(th0: f32, th1: f32) -> f32 {
     return w;
 }
 
+fn load_y(i: u32, p: vec2<i32>, n: i32) -> f32 {
+    let q = clamp(p, vec2<i32>(0), vec2<i32>(n - 1));  // clamp-to-edge
+    if (i == 0u) { return f32(textureLoad(y0, q, 0).r); }
+    return f32(textureLoad(y1, q, 0).r);
+}
+
+fn load_c(i: u32, p: vec2<i32>, n: i32) -> vec2<f32> {
+    let q = clamp(p, vec2<i32>(0), vec2<i32>(n - 1));
+    if (i == 0u) { return vec2<f32>(textureLoad(c0, q, 0).rg); }
+    return vec2<f32>(textureLoad(c1, q, 0).rg);
+}
+
+// pos: texel coordinates with texel centres at integers; returns normalized [0,1] like unorm16
+fn bilinear_y(i: u32, pos: vec2<f32>, n: i32) -> f32 {
+    let f = floor(pos);
+    let t = pos - f;
+    let p = vec2<i32>(f);
+    let a = load_y(i, p, n);
+    let b = load_y(i, p + vec2<i32>(1, 0), n);
+    let c = load_y(i, p + vec2<i32>(0, 1), n);
+    let d = load_y(i, p + vec2<i32>(1, 1), n);
+    return mix(mix(a, b, t.x), mix(c, d, t.x), t.y) / 65535.0;
+}
+
+fn bilinear_c(i: u32, pos: vec2<f32>, n: i32) -> vec2<f32> {
+    let f = floor(pos);
+    let t = pos - f;
+    let p = vec2<i32>(f);
+    let a = load_c(i, p, n);
+    let b = load_c(i, p + vec2<i32>(1, 0), n);
+    let c = load_c(i, p + vec2<i32>(0, 1), n);
+    let d = load_c(i, p + vec2<i32>(1, 1), n);
+    return mix(mix(a, b, t.x), mix(c, d, t.x), t.y) / 65535.0;
+}
+
 fn luma(i: u32, uv: vec2<f32>) -> f32 {
     let L = P.lens[i];
-    let tc = (uv + 0.5) / L.misc.y;
-    var v: f32;
-    if (i == 0u) { v = textureSampleLevel(y0, samp, tc, 0.0).r; }
-    else { v = textureSampleLevel(y1, samp, tc, 0.0).r; }
+    let v = bilinear_y(i, uv, i32(L.misc.y));
     return (v - L.gain.w) * L.gain.x + L.gain.w;
 }
 
 fn chroma(i: u32, uv: vec2<f32>) -> vec2<f32> {
     let L = P.lens[i];
-    let cs = L.misc.y * 0.5;
     // 4:2:0 left-cosited horizontally, centred vertically
-    let tc = vec2<f32>((uv.x * 0.5 + 0.5) / cs, ((uv.y - 0.5) * 0.5 + 0.5) / cs);
-    var c: vec2<f32>;
-    if (i == 0u) { c = textureSampleLevel(c0, samp, tc, 0.0).rg; }
-    else { c = textureSampleLevel(c1, samp, tc, 0.0).rg; }
+    let pos = vec2<f32>(uv.x * 0.5, (uv.y - 0.5) * 0.5);
+    let c = bilinear_c(i, pos, i32(L.misc.y * 0.5));
     return (c - vec2<f32>(0.5)) * L.gain.yz + vec2<f32>(0.5) + L.misc.zw;
 }
 
