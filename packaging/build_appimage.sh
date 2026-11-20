@@ -30,6 +30,9 @@ rm -rf "$BUILD/pyinstaller" "$BUILD/dist"
 .venv/bin/pyinstaller --noconfirm --clean --log-level WARN \
     --workpath "$BUILD/pyinstaller" --distpath "$BUILD/dist" packaging/osv360.spec
 
+echo "==> smoke test of the frozen binary"
+QT_QPA_PLATFORM=offscreen "$BUILD/dist/osv360/osv360" selftest
+
 echo "==> AppDir"
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/lib" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/metainfo" \

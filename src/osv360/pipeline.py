@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import queue
-import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -29,7 +28,13 @@ def _cache_dir() -> Path:
     repo = Path(__file__).resolve().parents[2]
     if (repo / "pyproject.toml").exists() and os.access(repo, os.W_OK):
         return repo / ".cache" / "calib"
-    base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    import sys
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     return base / "osv360" / "calib"
 
 
@@ -90,9 +95,9 @@ def factory_rig(meta: OSVMeta, blend_deg: float) -> Rig:
 
 
 def _gray_frame(path: Path, stream: int, t: float, size: int) -> np.ndarray:
-    raw = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-nostdin", "-ss", f"{t:.3f}", "-i", str(path),
+    raw = ffio.run_tool(["ffmpeg", "-hide_banner", "-v", "error", "-nostdin", "-ss", f"{t:.3f}", "-i", str(path),
                           "-map", f"0:{stream}", "-frames:v", "1", "-pix_fmt", "gray", "-f", "rawvideo", "pipe:1"],
-                         check=True, capture_output=True, env=ffio.sysenv()).stdout
+                         check=True, capture_output=True).stdout
     return np.frombuffer(raw, np.uint8).reshape(size, size)
 
 
@@ -223,9 +228,12 @@ def convert(src_path: str | Path, out_path: str | Path, opts: ConvertOptions, lo
     out_path.parent.mkdir(parents=True, exist_ok=True)
     gpu = GPUStitcher(rig, opts.width, opts.height, src.lens_size, readout_s=opts.readout_s)
     log(f"gpu: {gpu.adapter_info['device']} ({gpu.adapter_info['backend_type']})")
-    decs = [ffio.LensDecoder(src.path, s, src.lens_size, start_s, n) for s in src.video_streams]
     enc = ffio.Encoder(out_path, opts.width, opts.height, src.fps_num, src.fps_den, opts.encode,
                        src.path, src.audio_stream, start_s, n / fps)
+    log(f"encoder: {enc.backend}" + ("  (no hardware HEVC encoder found: CPU, slow)"
+                                     if enc.backend == "x265" and opts.encode.encoder == "auto"
+                                     and opts.encode.codec == "hevc" else ""))
+    decs = [ffio.LensDecoder(src.path, s, src.lens_size, start_s, n) for s in src.video_streams]
     expo = ExposureMatcher(rig) if opts.exposure_match else None
 
     lens_q = [queue.Queue(maxsize=3), queue.Queue(maxsize=3)]
@@ -253,7 +261,11 @@ def convert(src_path: str | Path, out_path: str | Path, opts: ConvertOptions, lo
             while (fr := out_q.get()) is not None:
                 enc.write(fr)
         except BaseException as e:  # noqa: BLE001
-            errors.append(e)
+            # the encoder died (bad driver, disk full, ...): record it and keep draining the
+            # queue so the render loop can never block on a full queue
+            errors.append(RuntimeError(f"encoder stopped: {e}; ffmpeg: {' '.join(enc.cmd)}"))
+            while out_q.get() is not None:
+                pass
 
     def frames():
         while True:
@@ -297,7 +309,8 @@ def convert(src_path: str | Path, out_path: str | Path, opts: ConvertOptions, lo
         cancel.set()  # KeyboardInterrupt / SIGTERM / GPU error: tear everything down
         raise
     finally:
-        if cancel.is_set():
+        if cancel.is_set() or errors:
+            out_q.put(None)  # lets a draining writer thread finish
             enc.abort()
             for d in decs:
                 d.close()

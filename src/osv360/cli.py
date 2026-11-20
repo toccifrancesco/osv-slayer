@@ -42,7 +42,8 @@ def build_options(a):
     return ConvertOptions(
         width=w, height=w // 2, start_s=a.start, duration_s=getattr(a, "duration", None),
         stab=StabParams(mode=a.stabilize, yaw_smooth_s=a.yaw_smooth, smooth_s=a.smooth),
-        encode=EncodeSettings(codec=a.codec, qp=a.qp, gop=a.gop, prores_profile=a.prores_profile),
+        encode=EncodeSettings(codec=a.codec, qp=a.qp, gop=a.gop, prores_profile=a.prores_profile,
+                              encoder=a.encoder),
         recalibrate=a.recalibrate, readout_s=a.readout_ms / 1000.0,
         exposure_match=not a.no_exposure_match, blend_deg=a.blend)
 
@@ -82,6 +83,18 @@ def cmd_convert(a):
 
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGINT, on_signal)
+    if a.progress_json:
+        # the GUI cancels by writing "cancel" to stdin (works on every OS, unlike SIGTERM on Windows)
+        def watch_stdin():
+            try:
+                for line in sys.stdin:
+                    if line.strip() == "cancel":
+                        cancel.set()
+                        return
+            except (OSError, ValueError):
+                pass
+
+        threading.Thread(target=watch_stdin, daemon=True).start()
     if a.output and len(a.inputs) > 1:
         raise SystemExit("-o/--output takes a single input; use --output-dir for batches")
     opts = build_options(a)
@@ -145,22 +158,22 @@ def cmd_still(a):
     print(f"wrote {a.output} (frame {idx})")
 
 
-def doctor() -> dict:
-    """check the runtime requirements: ffmpeg (+ hevc_vaapi), VA-API render node, Vulkan GPU."""
-    import shutil
-    import subprocess
-
+def doctor(width: int = 7680, height: int = 3840) -> dict:
+    """check the runtime requirements: ffmpeg, a hardware HEVC encoder, a GPU for wgpu."""
     from . import __version__
-    from .ffio import VAAPI_DEVICE, sysenv
+    from .ffio import EncodeSettings, run_tool, select_encoder, tool
 
-    r = {"version": __version__, "ffmpeg": None, "hevc_vaapi": False, "prores": False,
-         "vaapi_device": Path(VAAPI_DEVICE).exists(), "gpu": None, "ok": False}
-    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
-        out = subprocess.run(["ffmpeg", "-hide_banner", "-version"], capture_output=True, text=True, env=sysenv()).stdout
-        r["ffmpeg"] = out.splitlines()[0] if out else "unknown"
-        enc = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, env=sysenv()).stdout
-        r["hevc_vaapi"] = "hevc_vaapi" in enc
-        r["prores"] = "prores_ks" in enc
+    r = {"version": __version__, "platform": sys.platform, "ffmpeg": None, "ffmpeg_path": tool("ffmpeg"),
+         "encoder": None, "hardware_encoder": False, "gpu": None, "ok": False}
+    try:
+        out = run_tool(["ffmpeg", "-hide_banner", "-version"], capture_output=True, text=True).stdout
+        r["ffmpeg"] = out.splitlines()[0] if out else None
+    except OSError:
+        pass
+    if r["ffmpeg"]:
+        enc = select_encoder(EncodeSettings(), width, height)
+        r["encoder"] = enc
+        r["hardware_encoder"] = enc != "x265"
     try:
         import wgpu
         a = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
@@ -169,6 +182,42 @@ def doctor() -> dict:
         r["gpu_error"] = str(e)
     r["ok"] = bool(r["ffmpeg"] and r["gpu"])
     return r
+
+
+def cmd_selftest(_a):
+    """verify a (frozen) build can load everything it needs; no footage or GPU required."""
+    import importlib
+    import os
+    from pathlib import Path as P
+
+    mods = ["numpy", "scipy.spatial.transform", "scipy.optimize", "cv2", "wgpu",
+            "osv360.pipeline", "osv360.gpu.stitcher", "osv360.calibrate", "osv360.spherical"]
+    for m in mods:
+        importlib.import_module(m)
+    from .gpu import stitcher
+    assert "fn main" in stitcher.SHADER, "shader not bundled"
+    # CPU reference math end to end
+    from .cpu_ref import stitch
+    from .lens import Lens, Rig
+    lens = Lens(1047.0, 1047.0, 1919.5, 1919.5, [0.065, -0.011, 0.0087, -0.0062], [0, 0, 0, 1]).extended()
+    rig = Rig([lens, Lens(**{**lens.__dict__, "q_body": [0, 1, 0, 0]})]).scaled(64)
+    img = np.random.default_rng(0).uniform(0, 255, (64, 64)).astype(np.float32)
+    out = stitch([img, img], rig, 64, 32)
+    assert out.shape == (32, 64) and np.isfinite(out).all()
+    try:  # GUI stack (offscreen so it also works on headless build machines)
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+
+        from .gui import app as gui_app
+        qa = QApplication.instance() or QApplication([])
+        assert P(gui_app.ASSETS / "osv360.svg").is_file(), "icon not bundled"
+        w = gui_app.MainWindow.__new__(gui_app.MainWindow)  # class loads; no window needed
+        del w, qa
+        gui = "ok"
+    except ImportError as e:
+        gui = f"not installed ({e})"
+    print(f"selftest ok (gui: {gui})")
+    return 0
 
 
 def cmd_doctor(a):
@@ -203,6 +252,9 @@ def add_render_options(sp):
     sp.add_argument("--smooth", type=float, default=0.5, help="rotation smoothing sigma in s (smooth)")
     sp.add_argument("--scale", type=float, default=1.0, help="output size relative to 7680x3840")
     sp.add_argument("--codec", choices=["hevc", "prores", "x265"], default="hevc")
+    sp.add_argument("--encoder", default="auto",
+                    choices=["auto", "vaapi", "nvenc", "amf", "qsv", "videotoolbox", "x265"],
+                    help="HEVC backend (auto = first working hardware encoder, else CPU x265)")
     sp.add_argument("--qp", type=int, default=27, help="HEVC constant QP (lower = bigger/better; 30 ~ 300 Mbit/s)")
     sp.add_argument("--gop", type=int, default=25, help="keyframe interval in frames")
     sp.add_argument("--prores-profile", type=int, default=3, help="0 proxy, 1 LT, 2 422, 3 HQ")
@@ -239,6 +291,9 @@ def build_parser():
     pd = sub.add_parser("doctor", help="check ffmpeg / VA-API / GPU availability")
     pd.add_argument("--json", action="store_true")
     pd.set_defaults(func=cmd_doctor)
+
+    pt = sub.add_parser("selftest", help="check that this build is complete (used by CI)")
+    pt.set_defaults(func=cmd_selftest)
 
     ps = sub.add_parser("still", help="render a single frame to an image")
     ps.add_argument("input")

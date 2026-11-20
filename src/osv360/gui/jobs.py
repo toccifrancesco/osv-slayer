@@ -6,7 +6,6 @@ ffmpeg failures, and makes Stop a clean SIGTERM (the CLI removes partial output)
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -18,9 +17,13 @@ from .settings import AppSettings
 
 
 def self_command() -> list[str]:
-    """argv prefix that runs this same osv360 (frozen AppImage binary or python -m)."""
+    """argv prefix that runs the osv360 CLI: the console twin of a frozen app
+    (osv360-cli[.exe] next to the GUI binary on Windows/macOS), the frozen binary
+    itself (Linux AppImage), or `python -m osv360` from source."""
     if getattr(sys, "frozen", False):
-        return [sys.executable]
+        exe = Path(sys.executable)
+        twin = exe.with_name("osv360-cli" + exe.suffix)
+        return [str(twin if twin.exists() else exe)]
     return [sys.executable, "-m", "osv360"]
 
 
@@ -87,8 +90,12 @@ class Runner(QObject):
     def stop(self) -> None:
         self._stopping = True
         if self.proc is not None:
-            self.proc.terminate()  # SIGTERM -> the CLI cancels and cleans up
-            QProcessKiller(self.proc).arm(8000)
+            self.proc.write(b"cancel\n")  # the CLI cancels and removes the partial output
+            if sys.platform != "win32":
+                from PySide6.QtCore import QTimer
+                proc = self.proc
+                QTimer.singleShot(3000, lambda: proc.state() != QProcess.NotRunning and proc.terminate())
+            QProcessKiller(self.proc).arm(12000)
 
     # ------------------------------------------------------------------ internals
     def _next(self) -> None:
@@ -219,7 +226,7 @@ class ProbeTask(QRunnable):
     def run(self) -> None:
         dur, png, err = 0.0, b"", ""
         try:
-            from ..ffio import sysenv
+            from ..ffio import run_tool
             from ..mp4 import MP4
             with MP4(self.path) as m:
                 v = [t for t in m.tracks if t.handler == "vide" and t.codec in ("hvc1", "hev1")]
@@ -227,15 +234,14 @@ class ProbeTask(QRunnable):
                     err = "not a dual-lens Osmo 360 file"
                 if v:
                     dur = v[0].duration / v[0].timescale
-            probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=index,codec_name",
-                                    "-of", "json", str(self.path)], capture_output=True, text=True, timeout=20,
-                                   env=sysenv())
+            probe = run_tool(["ffprobe", "-v", "error", "-show_entries", "stream=index,codec_name",
+                                    "-of", "json", str(self.path)], capture_output=True, text=True, timeout=20)
             streams = json.loads(probe.stdout or "{}").get("streams", [])
             mj = [s["index"] for s in streams if s.get("codec_name") in ("mjpeg", "png")]
             if mj:
-                png = subprocess.run(["ffmpeg", "-v", "error", "-i", str(self.path), "-map", f"0:{mj[0]}",
+                png = run_tool(["ffmpeg", "-v", "error", "-i", str(self.path), "-map", f"0:{mj[0]}",
                                       "-frames:v", "1", "-vf", "scale=320:-2", "-f", "image2pipe",
-                                      "-vcodec", "png", "-"], capture_output=True, timeout=30, env=sysenv()).stdout
+                                      "-vcodec", "png", "-"], capture_output=True, timeout=30).stdout
         except Exception as e:  # noqa: BLE001
             err = err or str(e)
         self.signals.ready.emit(str(self.path), png, dur, err)

@@ -16,7 +16,6 @@ import argparse
 import subprocess
 
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 from osv360.vision import track_rotation
 

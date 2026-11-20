@@ -11,4 +11,5 @@ First release.
 - Lens exposure/colour matching.
 - CLI (`convert`, `still`, `info`, `doctor`) with JSON progress and clean cancellation.
 - PySide6 desktop app: drag & drop batch queue, thumbnails, progress/ETA, settings, notifications.
-- AppImage packaging.
+- Packages: Linux AppImage; Windows zip and macOS dmg (experimental), built by GitHub Actions.
+- Hardware encoder auto-selection (VA-API, NVENC, AMF, Quick Sync, VideoToolbox) with CPU x265 fallback.

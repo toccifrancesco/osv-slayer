@@ -11,13 +11,12 @@ from PySide6.QtGui import QAction, QDesktopServices, QIcon, QKeySequence, QPaint
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
                                QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
-                               QProgressBar, QPushButton, QSizePolicy, QSpinBox, QStackedWidget, QTabWidget,
+                               QProgressBar, QPushButton, QSpinBox, QStackedWidget, QTabWidget,
                                QVBoxLayout, QWidget)
 
-from .. import __version__
 from . import theme
 from .jobs import Job, Prober, Runner, fmt_time, self_command
-from .settings import CODECS, PRORES_PROFILES, QUALITY_PRESETS, RESOLUTIONS, STAB_MODES, AppSettings
+from .settings import CODECS, ENCODERS, PRORES_PROFILES, QUALITY_PRESETS, RESOLUTIONS, STAB_MODES, AppSettings
 
 ASSETS = Path(__file__).parent / "assets"
 OSV_EXT = (".osv",)
@@ -271,7 +270,7 @@ class SettingsDialog(QDialog):
         self.codec = QComboBox()
         for k, v in CODECS.items():
             self.codec.addItem(v, k)
-        self.codec.setCurrentIndex(list(CODECS).index(s.codec))
+        self.codec.setCurrentIndex(list(CODECS).index(s.codec) if s.codec in CODECS else 0)
         self.quality = QComboBox()
         for k, v in QUALITY_PRESETS.items():
             self.quality.addItem(k, v)
@@ -321,6 +320,10 @@ class SettingsDialog(QDialog):
         self.readout.setSingleStep(0.5)
         self.readout.setSuffix(" ms")
         self.readout.setValue(s.readout_ms)
+        self.encoder = QComboBox()
+        for k, v in ENCODERS.items():
+            self.encoder.addItem(v, k)
+        self.encoder.setCurrentIndex(list(ENCODERS).index(s.encoder) if s.encoder in ENCODERS else 0)
         self.recal = QCheckBox("Recalibrate lenses even if a cached calibration exists")
         self.recal.setChecked(s.recalibrate)
         f.addRow("Seam blend width", self.blend)
@@ -328,6 +331,9 @@ class SettingsDialog(QDialog):
         f.addRow("Rolling-shutter readout", self.readout)
         f.addRow("", hint("0 disables rolling-shutter correction (default). Only change it if you know your "
                           "sensor's readout time."))
+        f.addRow("HEVC encoder", self.encoder)
+        f.addRow("", hint("Automatic tests the hardware encoders of this computer and picks the first that "
+                          "works at the chosen resolution, falling back to the CPU."))
         f.addRow("", self.recal)
         reset = QPushButton("Restore defaults")
         reset.clicked.connect(self._reset)
@@ -389,6 +395,7 @@ class SettingsDialog(QDialog):
         s.exposure_match = self.expo.isChecked()
         s.readout_ms = self.readout.value()
         s.recalibrate = self.recal.isChecked()
+        s.encoder = self.encoder.currentData()
         return s
 
 
@@ -666,17 +673,28 @@ class MainWindow(QMainWindow):
             return
         msg = f"{ok} file(s) converted" + (f", {failed} failed" if failed else "")
         self._log(msg)
-        if self.settings.notify_when_done and shutil.which("notify-send"):
-            import subprocess
-
-            from ..ffio import sysenv
-            subprocess.Popen(["notify-send", "-a", "osv360", "-i", str(ASSETS / "osv360.svg"), "osv360", msg],
-                             env=sysenv(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if self.settings.notify_when_done:
+            self._notify(msg)
         QApplication.alert(self)
         if self.settings.open_folder_when_done and ok:
             folder = Path(self.settings.output_dir) if not self.settings.use_source_dir else \
                 next(j.output.parent for j in self.jobs if j.state == "done")
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def _notify(self, msg: str):
+        if sys.platform.startswith("linux") and shutil.which("notify-send"):
+            import subprocess
+
+            from ..ffio import sysenv
+            subprocess.Popen(["notify-send", "-a", "osv360", "-i", str(ASSETS / "osv360.svg"), "osv360", msg],
+                             env=sysenv(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            if not hasattr(self, "_tray"):
+                self._tray = QSystemTrayIcon(app_icon(), self)
+            self._tray.show()
+            self._tray.showMessage("osv360", msg, app_icon(), 8000)
 
     def _reveal(self, job: Job):
         if job.output:
@@ -730,17 +748,18 @@ class MainWindow(QMainWindow):
             r = {"ok": False, "ffmpeg": None, "gpu": None}
         if not r.get("ffmpeg"):
             state, text = "err", "ffmpeg not found"
-            tip = "osv360 needs ffmpeg/ffprobe installed on your system (e.g. `sudo pacman -S ffmpeg`)."
+            tip = ("osv360 needs ffmpeg. Linux: install it with your package manager · macOS: "
+                   "`brew install ffmpeg` · Windows: `winget install Gyan.FFmpeg`. Then restart osv360.")
         elif not r.get("gpu"):
-            state, text = "err", "No Vulkan GPU"
-            tip = "A Vulkan-capable GPU driver is required. " + r.get("gpu_error", "")
-        elif not (r.get("hevc_vaapi") and r.get("vaapi_device")):
-            state, text = "warn", "No VA-API encoder"
-            tip = (f"GPU: {r['gpu']}\nffmpeg: {r['ffmpeg']}\nHEVC VA-API encoding is unavailable: choose the "
-                   "ProRes or x265 codec in Settings.")
+            state, text = "err", "No GPU"
+            tip = "A GPU with Vulkan, Metal or Direct3D 12 support is required. " + r.get("gpu_error", "")
+        elif not r.get("hardware_encoder"):
+            state, text = "warn", "● CPU encoding (slow)"
+            tip = (f"GPU: {r['gpu']}\n{r['ffmpeg']}\nNo working hardware HEVC encoder was found, so the "
+                   "CPU encoder (x265) will be used. It works but is several times slower.")
         else:
             state, text = "ok", "● Ready · " + r["gpu"].split(" (")[0].replace("AMD ", "")
-            tip = f"GPU: {r['gpu']}\n{r['ffmpeg']}\nVA-API HEVC encoder: available"
+            tip = f"GPU: {r['gpu']}\n{r['ffmpeg']}\nHardware encoder: {r['encoder']}"
         self._system_ok = state != "err"
         self.sys_chip.setText(text)
         self.sys_chip.setToolTip(tip)

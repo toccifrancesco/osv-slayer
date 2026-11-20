@@ -105,8 +105,17 @@ Residual rotation measured on the output with `tools/stab_metric.py` (clip 1, cy
 
 ## 6. Encoding and container (`ffio.py`, `spherical.py`)
 
-- Frames go to `ffmpeg … hevc_vaapi -profile main10 -rc_mode CQP` and are written as an Annex-B elementary stream. They are then remuxed with `-tag:v hvc1`.
-  The two steps are needed because `hevc_vaapi`'s global header carries a different PPS `init_qp` than the in-band PPS. Decoders that trust the MP4 `hvcC` box (mandatory for `hvc1`) would otherwise decode garbage.
+- **Encoder choice**: the first working hardware HEVC Main10 encoder on the platform is used, and libx265 is the fallback. Each candidate must pass a 2-frame test encode at the real output size.
+
+  | platform | order | rate control |
+  |---|---|---|
+  | Linux | `hevc_vaapi`, `hevc_nvenc`, `hevc_qsv` | constant QP |
+  | Windows | `hevc_nvenc`, `hevc_amf`, `hevc_qsv` | constant QP |
+  | macOS | `hevc_videotoolbox` | bitrate mapped from QP (no CQP mode) |
+
+  Decoding uses VA-API on Linux and ffmpeg's `-hwaccel auto` elsewhere.
+- **Container**: the video is written as an Annex-B elementary stream, then remuxed with `-tag:v hvc1`.
+  The two steps are needed because `hevc_vaapi`'s global header carries a different PPS `init_qp` than the in-band PPS. Decoders that trust the MP4 `hvcC` box (mandatory for `hvc1`) would otherwise decode garbage. The same path is used for every encoder.
 - BT.709 limited-range tags are set in the stream and in `colr`.
 - 360° metadata is injected into the trailing `moov`, so no chunk offsets change. Both flavours are written:
   - Spherical Video V1: the `uuid` XMP box;

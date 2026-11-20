@@ -6,7 +6,7 @@
 
 <p align="center">
   Convert DJI Osmo 360 <code>.OSV</code> recordings into stabilized, editable 8K equirectangular 360° video.<br>
-  GPU stitching · IMU horizon lock · VA-API hardware encoding · Linux desktop app + CLI
+  GPU stitching · IMU horizon lock · hardware encoding · desktop app + CLI for Linux, Windows and macOS
 </p>
 
 <p align="center"><img src="docs/screenshot.png" alt="osv360 desktop app" width="860"></p>
@@ -24,38 +24,57 @@ the original audio.
 - **Seamless stitching.** Reads each camera's factory lens calibration from the file and refines it per clip from the footage itself. Seam misalignment is about 2 px at 8K.
 - **Horizon lock** from the camera's built-in 1 kHz IMU. Roll and pitch are removed completely while the view smoothly follows your direction of travel. Full direction lock, all-axis smoothing and off are also available.
 - **Exposure and colour matching** between the two lenses.
-- **GPU accelerated.** Hardware decode (VA-API) → Vulkan compute stitch (wgpu) → hardware HEVC encode (VA-API). An 8K50 clip converts at about 15 fps on a Radeon 890M laptop iGPU.
+- **GPU accelerated.** Hardware decode → GPU compute stitch (wgpu: Vulkan, Metal or Direct3D 12) → hardware HEVC encode (VA-API, NVENC, AMF, Quick Sync or VideoToolbox). An 8K50 clip converts at about 15 fps on a Radeon 890M laptop iGPU.
 - **Desktop app.** Drag & drop a batch of files and convert them with one click. It shows the camera's thumbnails, progress, ETA, cancel, notifications and persistent settings.
 - **CLI** for scripting, with the same options plus single-frame previews.
 - **Editor-friendly output.** `hvc1` HEVC Main10, BT.709 tags, 0.5 s keyframe interval, Spherical Video V1 + V2 metadata (recognised by YouTube, VLC, Kdenlive and others).
 - Reads the `.OSV` in place: no gigabytes of intermediate files.
 
+## Platforms
+
+| | Package | Hardware decode / encode | Status |
+|---|---|---|---|
+| **Linux** x86-64 | `.AppImage` | VA-API (AMD, Intel), NVENC | developed and tested here |
+| **Windows** 10/11 x64 | `.zip` | D3D11VA / NVENC, AMF, Quick Sync | experimental: built by CI, not yet tested on real hardware |
+| **macOS** 12+ Apple Silicon | `.dmg` | VideoToolbox | experimental: built by CI, not yet tested on real hardware |
+
+If no hardware HEVC encoder works, osv360 falls back to the CPU encoder (x265). It's correct, just several times slower.
+
 ## Requirements
 
-- Linux x86-64 with a **Vulkan** GPU driver (Mesa RADV/ANV, or NVIDIA).
-- **ffmpeg** ≥ 6 in `PATH`, with `hevc_vaapi` for hardware encoding (the default on Arch, Fedora, Ubuntu).
-  Without VA-API you can still pick the ProRes or x265 codec.
+- **A GPU** with Vulkan (Linux, Windows), Direct3D 12 (Windows) or Metal (macOS) for the stitching.
+- **ffmpeg** ≥ 6, installed separately:
+  - Linux: your package manager (`sudo pacman -S ffmpeg`, `sudo apt install ffmpeg`, `sudo dnf install ffmpeg`);
+  - macOS: `brew install ffmpeg`;
+  - Windows: `winget install Gyan.FFmpeg`, or put `ffmpeg.exe` and `ffprobe.exe` in an `ffmpeg` folder next to `osv360.exe`.
 - About 6 GB of free disk space per 2-minute clip at default quality.
 
 Check your system with `osv360 doctor` (or look at the status chip in the app).
 
 ## Install
 
-### AppImage
-Download `osv360-<version>-x86_64.AppImage`, make it executable and run it:
+Download the package for your system from the [Releases page](https://github.com/toccifrancesco/osv-slayer/releases).
 
+**Linux:** make the AppImage executable and run it:
 ```bash
 chmod +x osv360-*-x86_64.AppImage
-./osv360-*-x86_64.AppImage            # opens the app
-./osv360-*-x86_64.AppImage convert CAM_0001.OSV   # same binary works as CLI
+./osv360-*-x86_64.AppImage                          # opens the app
+./osv360-*-x86_64.AppImage convert CAM_0001.OSV     # the same file works as CLI
 ```
 
-### From source (with [uv](https://docs.astral.sh/uv/))
+**Windows:** unzip anywhere, then start `osv360.exe`. The app isn't code-signed, so SmartScreen may warn: choose *More info → Run anyway*.
+For the command line use `osv360-cli.exe`.
+
+**macOS:** open the `.dmg` and drag *osv360* into *Applications*. The app isn't notarized, so on first launch right-click it → *Open* → *Open*.
+If macOS says it is "damaged", run `xattr -dr com.apple.quarantine /Applications/osv360.app`.
+For the command line use `/Applications/osv360.app/Contents/MacOS/osv360-cli`.
+
+**From source** (any OS, with [uv](https://docs.astral.sh/uv/)):
 ```bash
-git clone <this repo> osv360 && cd osv360
+git clone https://github.com/toccifrancesco/osv-slayer.git && cd osv-slayer
 uv sync --extra gui
-.venv/bin/osv360                 # app
-.venv/bin/osv360 --help          # CLI
+uv run osv360                 # app
+uv run osv360 --help          # CLI
 ```
 
 ## Using the app
@@ -83,9 +102,10 @@ The first conversion of each clip spends about a minute calibrating the lenses. 
 | Advanced | Seam blend width | 6° | |
 | | Lens exposure matching | on | |
 | | Rolling-shutter readout | 0 ms (off) | experimental |
+| | HEVC encoder | Automatic | force VA-API / NVENC / AMF / Quick Sync / VideoToolbox / CPU |
 | | Recalibrate | off | ignore the cached lens calibration |
 
-Settings are stored in `~/.config/osv360/osv360.conf`. Set `OSV360_CONFIG=/path/file.ini` to use a different file (portable mode).
+Settings are stored in the usual place for your OS (Linux: `~/.config/osv360/osv360.conf`). Set `OSV360_CONFIG=/path/file.ini` to use a different file (portable mode).
 
 ## Using the CLI
 
@@ -115,7 +135,8 @@ osv360 doctor                                             # check ffmpeg / VA-AP
 - Objects within about 1 m of the camera (your hand, a helmet, the mount) cannot line up perfectly at the seam, because the two lenses see them from slightly different positions. DJI's own stitch shows the same.
 - Only the Osmo 360's `dvtm_oq101` metadata has been tested.
 - Rolling-shutter correction is experimental and off by default.
-- The AppImage is built on a current distribution, so very old systems (older glibc) may need to run from source.
+- The AppImage is built on Ubuntu 22.04 and needs glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+, Arch).
+- Windows and macOS builds are not code-signed or notarized (see *Install*), and macOS builds target Apple Silicon only.
 
 ## How it works
 

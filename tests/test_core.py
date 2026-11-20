@@ -13,6 +13,7 @@ from osv360.motion import VIEW_FROM_WORLD0, StabParams, view_rotations
 ROOT = Path(__file__).resolve().parents[1]
 OSV = next(iter(sorted((ROOT / "footage").glob("*.OSV"))), None)
 needs_osv = pytest.mark.skipif(OSV is None, reason="no .OSV footage available")
+needs_ffmpeg = pytest.mark.skipif(__import__("shutil").which("ffmpeg") is None, reason="ffmpeg not installed")
 
 FACTORY = [
     Lens(1047.02, 1046.66, 1903.80, 1921.07, [0.0656365, -0.0109562, 0.00865739, -0.00617398],
@@ -142,6 +143,7 @@ def test_gpu_matches_cpu_reference():
 
 
 # ------------------------------------------------------------------ spherical metadata
+@needs_ffmpeg
 def test_spherical_injection(tmp_path):
     out = tmp_path / "t.mp4"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=128x64:r=10", "-frames:v",
@@ -178,3 +180,8 @@ def test_gui_settings_to_cli_args():
     o = build_options(a)
     assert o.stab.mode == "lock" and o.encode.qp == 30 and o.width == 3840 and not o.exposure_match
     assert a.overwrite
+
+
+def test_selftest_command():
+    from osv360.cli import main
+    assert main(["selftest"]) == 0

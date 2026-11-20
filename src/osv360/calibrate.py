@@ -20,7 +20,7 @@ from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation as R
 
 from .cpu_ref import stitch_maps
-from .lens import Lens, Rig
+from .lens import Rig
 
 
 def _bilinear(img: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -106,7 +106,7 @@ def refine(frames_list, rig: Rig, iterations: int = 4, prior_max_deg: float = 60
     th_mono = np.radians(np.linspace(prior_max_deg, min_monotone_deg, 40))
     schedule = [(4096, 2048, 14.0), (4096, 2048, 10.0)] + [(4096, 2048, 8.0)] * max(0, iterations - 2)
     cur = rig
-    prev_pairs = None
+    prev_pairs, prev_rig = None, rig
     for it, (w, h, band) in enumerate(schedule[:iterations]):
         P0, P1, meds = [], [], []
         for fr in frames_list:

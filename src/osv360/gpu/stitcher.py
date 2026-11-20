@@ -36,7 +36,7 @@ class GPUStitcher:
         adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
         self.adapter_info = adapter.info
         self.dev = adapter.request_device_sync(
-            required_features=["texture-format16bit-norm", "float32-filterable"],
+            required_features=["texture-format16bit-norm"],
             required_limits={"max-storage-buffer-binding-size": adapter.limits["max-storage-buffer-binding-size"],
                              "max-buffer-size": adapter.limits["max-buffer-size"]})
         d = self.dev

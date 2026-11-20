@@ -29,6 +29,15 @@ CODECS = {
     "x265": "HEVC 10-bit MP4 (CPU x265, slow)",
 }
 PRORES_PROFILES = {"Proxy": 0, "LT": 1, "422": 2, "HQ": 3}
+ENCODERS = {
+    "auto": "Automatic (best available)",
+    "vaapi": "VA-API (Linux: AMD / Intel)",
+    "nvenc": "NVENC (NVIDIA)",
+    "amf": "AMF (AMD, Windows)",
+    "qsv": "Quick Sync (Intel)",
+    "videotoolbox": "VideoToolbox (macOS)",
+    "x265": "CPU (x265, slow)",
+}
 
 
 def _qsettings() -> QSettings:
@@ -40,8 +49,10 @@ def _qsettings() -> QSettings:
 
 
 def default_output_dir() -> str:
-    videos = Path.home() / "Videos"
-    return str((videos if videos.exists() else Path.home()) / "osv360")
+    from PySide6.QtCore import QStandardPaths
+    movies = QStandardPaths.writableLocation(QStandardPaths.MoviesLocation)  # ~/Videos, ~/Movies, ...
+    base = Path(movies) if movies else Path.home()
+    return str(base / "osv360")
 
 
 @dataclass
@@ -63,6 +74,7 @@ class AppSettings:
     prores_profile: int = 3
     scale: float = 1.0
     gop: int = 25
+    encoder: str = "auto"
     # advanced
     blend: float = 6.0
     exposure_match: bool = True
@@ -108,7 +120,7 @@ class AppSettings:
         a = ["--stabilize", self.stabilize, "--yaw-smooth", f"{self.yaw_smooth:g}", "--smooth", f"{self.smooth:g}",
              "--codec", self.codec, "--qp", str(self.qp), "--prores-profile", str(self.prores_profile),
              "--scale", f"{self.scale:g}", "--gop", str(self.gop), "--blend", f"{self.blend:g}",
-             "--readout-ms", f"{self.readout_ms:g}"]
+             "--readout-ms", f"{self.readout_ms:g}", "--encoder", self.encoder]
         if not self.exposure_match:
             a.append("--no-exposure-match")
         if self.recalibrate:
