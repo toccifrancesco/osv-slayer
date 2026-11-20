@@ -130,6 +130,12 @@ osv360 doctor                                             # check ffmpeg / VA-AP
 - If you need an intra-frame edit copy, convert with the ProRes codec. Expect about 10× larger files.
 - Colour is passed through as recorded. If you shot in D-Log M, apply DJI's LUT in your editor.
 
+## Troubleshooting
+
+- **"No GPU" in the app / `gpu None` in `osv360 doctor`**: check that a Vulkan driver is installed (e.g. `vulkan-radeon`, `vulkan-intel` or the NVIDIA driver). Run `VK_LOADER_DEBUG=error osv360 doctor` to see why the driver did not load.
+- **"ffmpeg not found"**: install ffmpeg (see *Requirements*) or set `OSV360_FFMPEG_DIR` to the folder that contains it.
+- **Slow conversion / "CPU encoding"**: no hardware HEVC encoder works on this machine. `osv360 doctor` shows which one was picked.
+
 ## Limitations
 
 - Objects within about 1 m of the camera (your hand, a helmet, the mount) cannot line up perfectly at the seam, because the two lenses see them from slightly different positions. DJI's own stitch shows the same.

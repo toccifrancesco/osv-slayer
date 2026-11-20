@@ -72,6 +72,9 @@ Things to know:
   - Homebrew's and common Windows install folders (GUI apps on macOS don't inherit the shell `PATH`).
 
   System tools run with the original `LD_LIBRARY_PATH` (`ffio.sysenv()`), never the bundle's.
+- **Linux system libraries are not bundled.** The spec drops everything PyInstaller collects from the build machine's system library folders: libstdc++, zlib, X11/xcb, fontconfig, glib, GTK, and so on. It also drops Qt's GTK theme plugin.
+  The user's GPU driver is loaded into the app's process and needs the *user's* newer copies of those libraries. An old bundled libstdc++ once made Mesa's Vulkan driver fail to load (`GLIBCXX_3.4.32 not found`), and the app found no GPU.
+  Libraries shipped inside Python wheels (Qt, OpenCV, SciPy) and Python's runtime stay bundled.
 - **Encoder selection** (`ffio.select_encoder`): it tries the platform's hardware HEVC encoders in order with a real 2-frame encode at the output resolution, and falls back to libx265.
 - **Cancellation**: the GUI writes `cancel` to the CLI's stdin. This works on Windows, where SIGTERM can't reach console programs. SIGTERM/SIGINT are also handled.
 - **glibc**: the AppImage needs a glibc at least as new as the build machine's. CI builds on Ubuntu 22.04 for that reason.

@@ -35,6 +35,30 @@ a = Analysis(
               "PySide6.QtNetwork", "PySide6.QtWebEngineCore", "PySide6.QtPdf"],
     noarchive=False,
 )
+if sys.platform.startswith("linux"):
+    # Do not bundle the build machine's *system* libraries (libstdc++, libz, X11/xcb, fontconfig,
+    # glib, GTK, ...). The user's GPU driver (e.g. Mesa RADV) is loaded into this process and
+    # needs the user's newer copies: an old bundled libstdc++ made the Vulkan driver fail to load
+    # ("GLIBCXX_3.4.32 not found" -> no GPU). Every desktop distro ships these libraries at least
+    # as new as the build machine (CI builds on Ubuntu 22.04). Libraries shipped *inside* Python
+    # wheels (Qt, OpenCV, SciPy) and Python's own runtime libraries stay bundled.
+    import os
+
+    SYSTEM_DIRS = ("/lib/", "/lib64/", "/usr/lib/", "/usr/lib64/", "/usr/local/lib/")
+    KEEP = ("libpython", "libssl", "libcrypto", "libsqlite3", "liblzma", "libbz2", "libmpdec", "libuuid",
+            "libncursesw", "libtinfo", "libreadline", "libpanelw", "libformw", "libmenuw", "libb2")
+
+    def system_lib(dest, src, typecode):
+        name = os.path.basename(dest)
+        return (typecode == "BINARY" and name.startswith("lib") and src.startswith(SYSTEM_DIRS)
+                and "site-packages" not in src and not name.startswith(KEEP))
+
+    dropped = sorted(os.path.basename(d) for d, s, t in a.binaries if system_lib(d, s, t))
+    a.binaries = [b for b in a.binaries if not system_lib(*b)]
+    # Qt's GTK platform theme drags the whole GTK stack into the process and is not used (Fusion style)
+    a.binaries = [b for b in a.binaries if "platformthemes/libqgtk3" not in b[0]]
+    print(f"osv360.spec: not bundling {len(dropped)} system libraries: {' '.join(dropped)}")
+
 pyz = PYZ(a.pure)
 
 exes = [EXE(pyz, a.scripts, [], exclude_binaries=True, name="osv360", icon=icon,
