@@ -340,10 +340,48 @@ class SettingsDialog(QDialog):
         f.addRow("", reset)
         tabs.addTab(w, "Advanced")
 
+        # --- about
+        w, f = page()
+        from .. import __version__
+        title = QLabel(f"<b>osv360 {__version__}</b>")
+        title.setStyleSheet("font-size: 14pt; background: transparent;")
+        about = QLabel(
+            "Converts DJI Osmo 360 recordings into stabilized equirectangular 360° video.<br><br>"
+            "Released under the MIT License.<br>"
+            '<a href="https://github.com/toccifrancesco/osv-slayer" style="color:#8b7bff;">'
+            "github.com/toccifrancesco/osv-slayer</a><br><br>"
+            "Not affiliated with or endorsed by DJI. “DJI” and “Osmo” are trademarks of their owner.")
+        about.setWordWrap(True)
+        about.setOpenExternalLinks(True)
+        about.setStyleSheet("background: transparent;")
+        notices = QPushButton("Third-party licenses…")
+        notices.clicked.connect(self._show_notices)
+        f.addRow(title)
+        f.addRow(about)
+        f.addRow(hint("osv360 includes Qt (LGPL-3.0), NumPy, SciPy, OpenCV, wgpu and other open-source "
+                      "software. Their licenses and notices:"))
+        f.addRow(notices)
+        tabs.addTab(w, "About")
+
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
+
+    def _show_notices(self):
+        from ..licenses import notices_text
+        dlg = QDialog(self)
+        dlg.setWindowTitle("osv360 — third-party licenses")
+        dlg.resize(820, 640)
+        lay = QVBoxLayout(dlg)
+        view = QPlainTextEdit()
+        view.setReadOnly(True)
+        view.setPlainText(notices_text())
+        lay.addWidget(view)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        dlg.exec()
 
     def _browse(self):
         d = QFileDialog.getExistingDirectory(self, "Output folder", self.out_dir.text())

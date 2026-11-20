@@ -49,6 +49,16 @@ def make_icons() -> None:
     print(f"icons -> {out}")
 
 
+def notices() -> Path:
+    """THIRD_PARTY_LICENSES.txt for everything that ends up in the package (see osv360/licenses.py)."""
+    BUILD.mkdir(exist_ok=True)
+    out = BUILD / "THIRD_PARTY_LICENSES.txt"
+    text = subprocess.run([sys.executable, "-m", "osv360.licenses"], check=True, capture_output=True).stdout
+    out.write_bytes(text)
+    print(f"notices -> {out} ({len(text) // 1024} KB)")
+    return out
+
+
 def pyinstaller() -> Path:
     run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--log-level", "WARN",
          "--workpath", BUILD / "pyinstaller", "--distpath", BUILD / "dist", ROOT / "packaging/osv360.spec"])
@@ -67,6 +77,7 @@ def package_windows() -> Path:
     smoke_test(folder / "osv360-cli.exe")
     shutil.copy(ROOT / "packaging/README-windows.txt", folder / "README.txt")
     shutil.copy(ROOT / "LICENSE", folder / "LICENSE.txt")
+    shutil.copy(BUILD / "THIRD_PARTY_LICENSES.txt", folder / "THIRD_PARTY_LICENSES.txt")
     DIST.mkdir(exist_ok=True)
     # note: not Path.with_suffix(): the version's dots would be taken for an extension
     archive = shutil.make_archive(str(DIST / f"osv360-{VERSION}-windows-x64"), "zip",
@@ -86,6 +97,8 @@ def package_macos() -> Path:
     run(["ditto", app, stage / "osv360.app"])
     (stage / "Applications").symlink_to("/Applications")
     shutil.copy(ROOT / "packaging/README-macos.txt", stage / "READ ME FIRST.txt")
+    shutil.copy(ROOT / "LICENSE", stage / "LICENSE.txt")
+    shutil.copy(BUILD / "THIRD_PARTY_LICENSES.txt", stage / "THIRD_PARTY_LICENSES.txt")
     DIST.mkdir(exist_ok=True)
     arch = "arm64" if platform.machine() == "arm64" else "x86_64"
     out = DIST / f"osv360-{VERSION}-macos-{arch}.dmg"
@@ -99,6 +112,7 @@ def main() -> int:
         run(["bash", ROOT / "packaging/build_appimage.sh"])
         return 0
     make_icons()
+    notices()
     out = package_windows() if sys.platform == "win32" else package_macos()
     print(f"==> built {out} ({out.stat().st_size / 1e6:.0f} MB)")
     return 0

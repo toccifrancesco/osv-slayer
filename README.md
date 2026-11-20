@@ -151,4 +151,8 @@ Development, tests and building the AppImage are covered in [docs/DEVELOPMENT.md
 
 ## License
 
-[MIT](LICENSE). Not affiliated with or endorsed by DJI. "DJI" and "Osmo" are trademarks of their respective owner.
+osv360 is released under the [MIT](LICENSE) license.
+
+The downloadable packages also contain third-party open-source software: Qt/PySide6 (LGPL-3.0), NumPy, SciPy, OpenCV, wgpu, Python and others. Their licenses and notices are in `THIRD_PARTY_LICENSES.txt` inside each package, and in the app under *Settings → About*. ffmpeg isn't bundled.
+
+Not affiliated with or endorsed by DJI. "DJI" and "Osmo" are trademarks of their respective owner.

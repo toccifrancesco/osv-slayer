@@ -25,8 +25,12 @@ uv sync --extra build --extra dev
 echo "==> tests"
 .venv/bin/python -m pytest -q
 
+echo "==> third-party license notices"
+mkdir -p "$BUILD"
+.venv/bin/python -m osv360.licenses > "$BUILD/THIRD_PARTY_LICENSES.txt"
+
 echo "==> pyinstaller"
-rm -rf "$BUILD/pyinstaller" "$BUILD/dist"
+rm -rf "$BUILD/pyinstaller" "$BUILD/dist"  # (license notices above are kept)
 .venv/bin/pyinstaller --noconfirm --clean --log-level WARN \
     --workpath "$BUILD/pyinstaller" --distpath "$BUILD/dist" packaging/osv360.spec
 
@@ -42,6 +46,8 @@ install -m755 packaging/AppRun "$APPDIR/AppRun"
 install -m644 packaging/osv360.desktop "$APPDIR/osv360.desktop"
 install -m644 packaging/osv360.desktop "$APPDIR/usr/share/applications/osv360.desktop"
 install -m644 packaging/osv360.appdata.xml "$APPDIR/usr/share/metainfo/osv360.appdata.xml"
+install -Dm644 LICENSE "$APPDIR/usr/share/doc/osv360/LICENSE"
+install -Dm644 "$BUILD/THIRD_PARTY_LICENSES.txt" "$APPDIR/usr/share/doc/osv360/THIRD_PARTY_LICENSES.txt"
 SVG=src/osv360/gui/assets/osv360.svg
 install -m644 "$SVG" "$APPDIR/usr/share/icons/hicolor/scalable/apps/osv360.svg"
 if command -v rsvg-convert >/dev/null; then

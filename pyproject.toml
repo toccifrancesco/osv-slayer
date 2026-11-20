@@ -1,6 +1,6 @@
 [project]
 name = "osv360"
-version = "0.1.0"
+version = "0.1.1"
 description = "DJI Osmo 360 .OSV -> stabilized equirectangular video (GPU stitching, IMU horizon lock)"
 readme = "README.md"
 license = "MIT"

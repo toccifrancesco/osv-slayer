@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-11-20
+
+- Every package now ships `THIRD_PARTY_LICENSES.txt` with the license texts and notices of the
+  bundled open-source software (Qt/PySide6 LGPL-3.0, NumPy, SciPy, OpenCV, wgpu, Python, …).
+  The same text is available in the app under Settings → About.
+- Python's unused `readline` module (GNU Readline, GPL) is no longer bundled.
+
 ## 0.1.0 — 2026-11-20
 
 First release.
